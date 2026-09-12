@@ -1,9 +1,13 @@
 package com.example.ERP_Api.Entity;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
 import java.time.LocalDate;
 import java.time.Instant;
 
+@Getter
 @Entity
 @Table(name = "transactions")
 public class Transaction {
@@ -12,22 +16,24 @@ public class Transaction {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Setter
     private LocalDate date; // the accounting date (e.g. "2026-09-01"), separate from createdAt below
 
+    @Setter
     private String description;
+    @Setter
     private String category; // e.g. "Sales", "Payroll", "Facilities", "Inventory"
 
-    // Cents, not double — consistent with Order.amountCents and
-    // Product.priceCents. Aggregating doubles in a SUM query for the
-    // revenue/expense summary cards is where float drift actually bites.
+
+    @Setter
     private Long amountCents;
 
+    @Setter
     @Enumerated(EnumType.STRING)
     private TransactionType type; // INCOME, EXPENSE
 
-    // Optional link back to the order that generated this transaction —
-    // not every transaction has one (rent, payroll don't), so this stays
-    // nullable. Lets you trace "this $950 income row" back to Order #1042.
+
+    @Setter
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id")
     private Order order;
@@ -47,61 +53,6 @@ public class Transaction {
         this.createdAt = Instant.now();
     }
 
-    // ===== Getters and setters =====
 
-    public Long getId() {
-        return id;
-    }
 
-    public LocalDate getDate() {
-        return date;
-    }
-
-    public void setDate(LocalDate date) {
-        this.date = date;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public String getCategory() {
-        return category;
-    }
-
-    public void setCategory(String category) {
-        this.category = category;
-    }
-
-    public Long getAmountCents() {
-        return amountCents;
-    }
-
-    public void setAmountCents(Long amountCents) {
-        this.amountCents = amountCents;
-    }
-
-    public TransactionType getType() {
-        return type;
-    }
-
-    public void setType(TransactionType type) {
-        this.type = type;
-    }
-
-    public Order getOrder() {
-        return order;
-    }
-
-    public void setOrder(Order order) {
-        this.order = order;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
 }
