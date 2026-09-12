@@ -9,13 +9,10 @@ public enum ShippingStatus {
     DELIVERED,
     DECLINED;
 
-    // Defines which transitions are legal, so a bare PATCH can't move an
-    // order backwards (e.g. DELIVERED -> PENDING) or into a state that
-    // doesn't make sense for where it currently is.
     private static final Map<ShippingStatus, Set<ShippingStatus>> ALLOWED_TRANSITIONS = Map.of(
             PENDING, Set.of(DELIVERED, DECLINED),
-            DELIVERED, Set.of(),   // terminal state
-            DECLINED, Set.of()     // terminal state
+            DELIVERED, Set.of(),
+            DECLINED, Set.of()
     );
 
     public boolean canTransitionTo(ShippingStatus newStatus) {
