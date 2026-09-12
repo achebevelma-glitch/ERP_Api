@@ -20,14 +20,12 @@ public class StockAdjustment {
     @JoinColumn(name = "inventory_id", nullable = false)
     private Inventory inventory;
 
-    // Signed delta: negative for a sale, positive for a restock. This is
-    // what /api/inventory/{productId}/adjustments writes to, instead of
-    // letting a raw PATCH overwrite quantity directly.
-    @Setter
-    private Integer delta;
 
     @Setter
-    private String reason; // e.g. "sale", "restock", "damaged", "correction"
+    private Integer delta;//negative for sale , positive for restock
+
+    @Setter
+    private String reason; //  "sale", "restock", "damaged", "correction"
 
     private Instant createdAt;
 
@@ -41,6 +39,5 @@ public class StockAdjustment {
         this.createdAt = Instant.now();
     }
 
-    // ===== Getters and setters =====
 
 }
