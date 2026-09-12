@@ -1,6 +1,7 @@
 package com.example.ERP_Api.Entity;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -27,6 +28,7 @@ public class Inventory {
     private Instant updatedAt;
 
     @OneToMany(mappedBy = "inventory", cascade = CascadeType.ALL)
+    @JsonIgnoreProperties("inventory")
     private List<StockAdjustment> adjustments = new ArrayList<>();
 
     public Inventory() {

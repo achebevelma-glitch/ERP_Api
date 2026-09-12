@@ -1,5 +1,6 @@
 package com.example.ERP_Api.Entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -18,6 +19,7 @@ public class StockAdjustment {
     @Setter
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "inventory_id", nullable = false)
+    @JsonIgnoreProperties("adjustments")
     private Inventory inventory;
 
 
