@@ -23,10 +23,20 @@ public class TransactionController {
 
     @GetMapping("/transactions")
     public List<Transaction> list(
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) TransactionType type,
-            @RequestParam(required = false) String category) {
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate from,
+
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate to,
+
+            @RequestParam(required = false)
+            TransactionType type,
+
+            @RequestParam(required = false)
+            String category) {
+
         return transactionService.list(from, to, type, category);
     }
 
@@ -37,8 +47,10 @@ public class TransactionController {
 
     @PostMapping("/transactions")
     @ResponseStatus(HttpStatus.CREATED)
-    public Transaction create(@RequestBody Transaction transaction) {
-        return transactionService.create(transaction);
+    public Transaction create(
+            @RequestBody TransactionService.CreateTransactionRequest req) {
+
+        return transactionService.create(req);
     }
 
     @DeleteMapping("/transactions/{id}")
