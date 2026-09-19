@@ -1,4 +1,4 @@
-package com.example.ERP_Api.Controller;
+package com.example.ERP_Api.Contoller;
 
 import com.example.ERP_Api.Entity.Inventory;
 import com.example.ERP_Api.Entity.StockStatus;
@@ -29,9 +29,7 @@ public class InventoryController {
         return inventoryService.getByProductId(productId);
     }
 
-    // Creates the initial inventory row for a product that doesn't have one
-    // yet. Body: {"quantity": 50}. This is the endpoint that was missing —
-    // adjustments below can only modify an existing row, not create one.
+
     @PostMapping("/{productId}")
     @ResponseStatus(HttpStatus.CREATED)
     public Inventory initialize(@PathVariable Long productId, @RequestBody InitInventoryRequest req) {
@@ -40,8 +38,6 @@ public class InventoryController {
 
     public record InitInventoryRequest(int quantity) {}
 
-    // Not a PATCH — quantity only ever changes through an audited
-    // adjustment. Body: {"delta": -5, "reason": "sale"}
     @PostMapping("/{productId}/adjustments")
     public Inventory adjust(@PathVariable Long productId, @RequestBody StockAdjustmentRequest req) {
         return inventoryService.adjustStock(productId, req.delta(), req.reason());
