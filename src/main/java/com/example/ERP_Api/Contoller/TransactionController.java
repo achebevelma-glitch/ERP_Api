@@ -21,7 +21,7 @@ public class TransactionController {
         this.transactionService = transactionService;
     }
 
-    @GetMapping("/transactions")
+    @GetMapping("/transaction")
     public List<Transaction> list(
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
