@@ -22,9 +22,14 @@ public class AuthService {
         this.jwtService = jwtService;
     }
 
-    public record RegisterRequest(String name, String email, String password) {}
-    public record LoginRequest(String email, String password) {}
-    public record AuthResponse(String token, String name, String email) {}
+    public record RegisterRequest(String name, String email, String password) {
+    }
+
+    public record LoginRequest(String email, String password) {
+    }
+
+    public record AuthResponse(String token, String name, String email, String role) {
+    }
 
     // Matches the create-account.html frontend: throws on duplicate email
     // so the controller can map it to a 409, matching the JS that already
@@ -38,8 +43,8 @@ public class AuthService {
         User user = new User(req.name(), req.email(), hash);
         userRepository.save(user);
 
-        String token = jwtService.generateToken(user.getEmail());
-        return new AuthResponse(token, user.getName(), user.getEmail());
+        String token = jwtService.generateToken(user.getEmail(), user.getRole());
+        return new AuthResponse(token, user.getName(), user.getEmail(), user.getRole().name());
     }
 
     // Matches login.html: throws on bad credentials so the controller can
@@ -52,7 +57,7 @@ public class AuthService {
             throw new IllegalArgumentException("Incorrect email or password");
         }
 
-        String token = jwtService.generateToken(user.getEmail());
-        return new AuthResponse(token, user.getName(), user.getEmail());
+        String token = jwtService.generateToken(user.getEmail(), user.getRole());
+        return new AuthResponse(token, user.getName(), user.getEmail(), user.getRole().name());
     }
 }
