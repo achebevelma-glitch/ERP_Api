@@ -1,6 +1,7 @@
 package com.example.ERP_Api.Service;
 
 
+import com.example.ERP_Api.Entity.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -12,15 +13,11 @@ import java.util.Date;
 @Service
 public class JwtService {
 
-    // In a real deployment, load this from an environment variable —
-    // never hardcode a signing key in source. This one is generated fresh
-    // on every restart, which means tokens won't survive a server
-    // restart — fine for development, not for production.
     private final SecretKey signingKey = Keys.secretKeyFor(io.jsonwebtoken.SignatureAlgorithm.HS256);
 
     private static final long EXPIRATION_MS = 1000 * 60 * 60 * 24; // 24 hours
 
-    public String generateToken(String email) {
+    public String generateToken(String email, Role role) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + EXPIRATION_MS);
 
@@ -28,8 +25,13 @@ public class JwtService {
                 .subject(email)
                 .issuedAt(now)
                 .expiration(expiry)
+                .claim("role", role.name())
                 .signWith(signingKey)
                 .compact();
+    }
+    public String extractRole(String token) {
+        Object role = parseClaims(token).get("role");
+        return role == null ? "USER" : role.toString();
     }
 
     public String extractEmail(String token) {
