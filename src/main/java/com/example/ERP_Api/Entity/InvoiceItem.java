@@ -19,7 +19,7 @@ public class InvoiceItem {
     @JoinColumn(name = "invoice_id")
     private Invoice invoice;
 
-    // Snapshot: the invoice must not change if the product is renamed or repriced later
+    private Long orderId;
     private Long productId;
     private String productName;
     private String sku;
