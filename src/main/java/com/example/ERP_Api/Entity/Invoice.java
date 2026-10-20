@@ -44,6 +44,8 @@ public class Invoice {
 
     private Instant createdAt = Instant.now();
 
+    private Instant paidAt;
+
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<InvoiceItem> items = new ArrayList<>();
 
