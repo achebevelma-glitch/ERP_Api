@@ -43,4 +43,8 @@ public class InvoiceController {
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
         return invoiceService.get(id, auth.getName(), admin);
     }
+    @PatchMapping("/{id}/pay")
+    public InvoiceDto pay(@PathVariable Long id) {
+        return invoiceService.markPaid(id);
+    }
 }
