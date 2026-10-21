@@ -1,24 +1,28 @@
-
 package com.example.ERP_Api.Service;
 
 import com.example.ERP_Api.Entity.Inventory;
 import com.example.ERP_Api.Entity.Product;
 import com.example.ERP_Api.Repository.InventoryRepository;
+import com.example.ERP_Api.Repository.OrderRepository;
 import com.example.ERP_Api.Repository.ProductRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProductService {
 
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
+    private final OrderRepository orderRepository;
 
-
-    public ProductService(ProductRepository productRepository, InventoryRepository inventoryRepository) {
+    public ProductService(ProductRepository productRepository,
+                          InventoryRepository inventoryRepository,
+                          OrderRepository orderRepository) {
         this.productRepository = productRepository;
         this.inventoryRepository = inventoryRepository;
+        this.orderRepository = orderRepository;
     }
 
     public Page<Product> list(String search, String category, Pageable pageable) {
@@ -41,7 +45,6 @@ public class ProductService {
         Product saved = productRepository.save(product);
         inventoryRepository.save(new Inventory(saved, 0)); // starts at 0, adjust stock separately
         return saved;
-
     }
 
     public Product update(Long id, Product changes) {
@@ -53,7 +56,17 @@ public class ProductService {
         return productRepository.save(existing);
     }
 
+    @Transactional
     public void delete(Long id) {
-        productRepository.deleteById(id);
+        Product product = getById(id); // 404 if it doesn't exist
+
+        if (orderRepository.existsByProductId(id)) {
+            throw new IllegalStateException(
+                    "Cannot delete \"" + product.getName() + "\": it is used by existing orders.");
+        }
+
+        // Remove its inventory row first (stock history is removed with it)
+        inventoryRepository.findByProductId(id).ifPresent(inventoryRepository::delete);
+        productRepository.delete(product);
     }
 }
