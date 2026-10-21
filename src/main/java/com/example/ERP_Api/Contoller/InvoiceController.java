@@ -47,4 +47,13 @@ public class InvoiceController {
     public InvoiceDto pay(@PathVariable Long id) {
         return invoiceService.markPaid(id);
     }
+
+    public record RefundRequest(Boolean restock) {}
+
+    @PatchMapping("/{id}/refund")
+    public InvoiceDto refund(@PathVariable Long id,
+                             @RequestBody(required = false) RefundRequest req) {
+        boolean restock = req == null || req.restock() == null || req.restock();
+        return invoiceService.refund(id, restock);
+    }
 }
