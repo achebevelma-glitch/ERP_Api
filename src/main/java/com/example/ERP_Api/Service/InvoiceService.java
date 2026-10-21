@@ -1,6 +1,5 @@
 package com.example.ERP_Api.Service;
 
-
 import com.example.ERP_Api.Entity.*;
 import com.example.ERP_Api.Repository.*;
 import org.springframework.http.HttpStatus;
@@ -9,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.Year;
 import java.util.List;
 import java.util.Map;
@@ -25,17 +25,23 @@ public class InvoiceService {
     private final ProductRepository productRepository;
     private final InventoryRepository inventoryRepository;
     private final OrderRepository orderRepository;
+    private final TransactionRepository transactionRepository;
+    private final InventoryService inventoryService;
 
     public InvoiceService(InvoiceRepository invoiceRepository,
                           CustomerRepository customerRepository,
                           ProductRepository productRepository,
                           InventoryRepository inventoryRepository,
-                          OrderRepository orderRepository) {
+                          OrderRepository orderRepository,
+                          TransactionRepository transactionRepository,
+                          InventoryService inventoryService) {
         this.invoiceRepository = invoiceRepository;
         this.customerRepository = customerRepository;
         this.productRepository = productRepository;
         this.inventoryRepository = inventoryRepository;
         this.orderRepository = orderRepository;
+        this.transactionRepository = transactionRepository;
+        this.inventoryService = inventoryService;
     }
 
     // ===== Request / response shapes =====
@@ -48,7 +54,7 @@ public class InvoiceService {
     public record InvoiceItemDto(Long productId, String name, String sku, Integer quantity,
                                  Long unitPriceCents, Long lineTotalCents) {}
 
-    public record InvoiceDto(Long id, String invoiceNumber, Instant createdAt,
+    public record InvoiceDto(Long id, String invoiceNumber, Instant createdAt, Instant paidAt,
                              String customerName, String customerEmail, String customerPhone,
                              String deliveryAddress, String paymentMethod, String status,
                              Long totalCents, List<InvoiceItemDto> items) {}
@@ -70,8 +76,6 @@ public class InvoiceService {
         String method = req.paymentMethod() == null ? "" : req.paymentMethod().trim().toLowerCase();
         if (!PAYMENT_METHODS.contains(method)) throw bad("Choose a valid payment method.");
 
-        // Merge duplicate lines. TreeMap sorts by product id so stock rows are always
-        // locked in the same order, which avoids deadlocks between concurrent checkouts.
         Map<Long, Integer> wanted = new TreeMap<>();
         for (CheckoutLine line : req.items()) {
             if (line == null || line.productId() == null || line.quantity() == null
@@ -113,13 +117,11 @@ public class InvoiceService {
             inventory.setQuantity(inventory.getQuantity() - qty);
             inventoryRepository.save(inventory);
 
-            // The price always comes from the database, never from the browser
             long unit = product.getPriceCents() == null ? 0L : product.getPriceCents();
             long lineTotal = unit * qty;
             total += lineTotal;
 
-            // Also record it as a normal order so it shows on the Orders page and dashboard
-            orderRepository.save(new Order(customer, product, qty, lineTotal,
+            Order savedOrder = orderRepository.save(new Order(customer, product, qty, lineTotal,
                     PaymentStatus.DUE, ShippingStatus.PENDING));
 
             InvoiceItem item = new InvoiceItem();
@@ -128,6 +130,7 @@ public class InvoiceService {
             item.setSku(product.getSku());
             item.setQuantity(qty);
             item.setUnitPriceCents(unit);
+            item.setOrderId(savedOrder.getId());
             invoice.addItem(item);
         }
 
@@ -137,6 +140,122 @@ public class InvoiceService {
         invoice = invoiceRepository.save(invoice);
 
         return toDto(invoice);
+    }
+
+    // ===== Payment =====
+
+    /**
+     * Marks an invoice as paid: the invoice and its orders become PAID, and one INCOME
+     * transaction (category "Sales") is recorded per order. This is what feeds
+     * Total Sales and Net Profit on the dashboard.
+     */
+    @Transactional
+    public InvoiceDto markPaid(Long id) {
+        Invoice invoice = invoiceRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
+
+        if (invoice.getPaymentStatus() != PaymentStatus.DUE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Invoice " + invoice.getInvoiceNumber() + " is already "
+                            + invoice.getPaymentStatus().name().toLowerCase() + ".");
+        }
+
+        LocalDate today = LocalDate.now();
+        long unlinkedTotal = 0;
+
+        for (InvoiceItem item : invoice.getItems()) {
+            long lineTotal = item.getUnitPriceCents() * item.getQuantity();
+
+            if (item.getOrderId() == null) {
+                // Invoice created before lines were linked to orders
+                unlinkedTotal += lineTotal;
+                continue;
+            }
+
+            Order order = orderRepository.findById(item.getOrderId()).orElse(null);
+            if (order == null || order.getShippingStatus() == ShippingStatus.DECLINED) {
+                continue; // cancelled or deleted order: no income
+            }
+
+            order.setPaymentStatus(PaymentStatus.PAID);
+            orderRepository.save(order);
+
+            Transaction income = new Transaction(today,
+                    "Invoice " + invoice.getInvoiceNumber() + " - " + item.getProductName(),
+                    "Sales", lineTotal, TransactionType.INCOME);
+            income.setOrder(order);
+            transactionRepository.save(income);
+        }
+
+        if (unlinkedTotal > 0) {
+            transactionRepository.save(new Transaction(today,
+                    "Invoice " + invoice.getInvoiceNumber(), "Sales", unlinkedTotal, TransactionType.INCOME));
+        }
+
+        invoice.setPaymentStatus(PaymentStatus.PAID);
+        invoice.setPaidAt(Instant.now());
+        return toDto(invoiceRepository.save(invoice));
+    }
+
+
+    /**
+     * Refunds a PAID invoice: the invoice and its paid orders become REFUNDED, and one
+     * EXPENSE transaction (category "Refunds") is recorded per paid line. When restock is
+     * true the refunded quantities go back into inventory.
+     */
+    @Transactional
+    public InvoiceDto refund(Long id, boolean restock) {
+        Invoice invoice = invoiceRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
+
+        if (invoice.getPaymentStatus() == PaymentStatus.DUE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Invoice " + invoice.getInvoiceNumber() + " has not been paid, so there is nothing to refund.");
+        }
+        if (invoice.getPaymentStatus() == PaymentStatus.REFUNDED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Invoice " + invoice.getInvoiceNumber() + " is already refunded.");
+        }
+
+        LocalDate today = LocalDate.now();
+        long unlinkedTotal = 0;
+
+        for (InvoiceItem item : invoice.getItems()) {
+            long lineTotal = item.getUnitPriceCents() * item.getQuantity();
+
+            if (item.getOrderId() == null) {
+                // Invoice created before lines were linked to orders
+                unlinkedTotal += lineTotal;
+            } else {
+                Order order = orderRepository.findById(item.getOrderId()).orElse(null);
+                // Only lines that were actually paid were counted as income
+                if (order == null || order.getPaymentStatus() != PaymentStatus.PAID) {
+                    continue;
+                }
+
+                order.setPaymentStatus(PaymentStatus.REFUNDED);
+                orderRepository.save(order);
+
+                Transaction expense = new Transaction(today,
+                        "Refund " + invoice.getInvoiceNumber() + " - " + item.getProductName(),
+                        "Refunds", lineTotal, TransactionType.EXPENSE);
+                expense.setOrder(order);
+                transactionRepository.save(expense);
+            }
+
+            if (restock && inventoryRepository.findByProductId(item.getProductId()).isPresent()) {
+                inventoryService.adjustStock(item.getProductId(), item.getQuantity(), "refund");
+            }
+        }
+
+        if (unlinkedTotal > 0) {
+            transactionRepository.save(new Transaction(today,
+                    "Refund " + invoice.getInvoiceNumber(), "Refunds", unlinkedTotal, TransactionType.EXPENSE));
+        }
+
+        invoice.setPaymentStatus(PaymentStatus.REFUNDED);
+        invoice.setRefundedAt(Instant.now());
+        return toDto(invoiceRepository.save(invoice));
     }
 
     // ===== Reading =====
@@ -156,7 +275,6 @@ public class InvoiceService {
     public InvoiceDto get(Long id, String email, boolean admin) {
         Invoice invoice = invoiceRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found"));
-        // Someone else's invoice looks exactly like one that doesn't exist
         if (!admin && !invoice.getCreatedBy().equalsIgnoreCase(email)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found");
         }
@@ -171,7 +289,7 @@ public class InvoiceService {
                         it.getQuantity(), it.getUnitPriceCents(),
                         it.getUnitPriceCents() * it.getQuantity()))
                 .toList();
-        return new InvoiceDto(i.getId(), i.getInvoiceNumber(), i.getCreatedAt(),
+        return new InvoiceDto(i.getId(), i.getInvoiceNumber(), i.getCreatedAt(), i.getPaidAt(),
                 i.getCustomerName(), i.getCustomerEmail(), i.getCustomerPhone(),
                 i.getDeliveryAddress(), i.getPaymentMethod(), i.getPaymentStatus().name(),
                 i.getTotalCents(), items);
