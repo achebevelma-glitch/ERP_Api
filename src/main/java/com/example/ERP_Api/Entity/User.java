@@ -27,16 +27,6 @@ public class User {
     private String passwordHash;
 
     private Instant createdAt;
-
-    public User() {
-    }
-
-    public User(String name, String email, String passwordHash) {
-        this.name = name;
-        this.email = email;
-        this.passwordHash = passwordHash;
-    }
-
     @PrePersist
     protected void onCreate() {
         if (this.createdAt == null) {
@@ -47,5 +37,16 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "varchar(20) default 'USER'")
     private Role role = Role.USER;
+
+    public User() {
+    }
+
+    public User(String name, String email, String passwordHash) {
+        this.name = name;
+        this.email = email;
+        this.passwordHash = passwordHash;
+    }
+
+
 
 }
