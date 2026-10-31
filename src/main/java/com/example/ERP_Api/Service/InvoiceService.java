@@ -27,6 +27,7 @@ public class InvoiceService {
     private final OrderRepository orderRepository;
     private final TransactionRepository transactionRepository;
     private final InventoryService inventoryService;
+    private final NotificationService notificationService;
 
     public InvoiceService(InvoiceRepository invoiceRepository,
                           CustomerRepository customerRepository,
@@ -34,7 +35,8 @@ public class InvoiceService {
                           InventoryRepository inventoryRepository,
                           OrderRepository orderRepository,
                           TransactionRepository transactionRepository,
-                          InventoryService inventoryService) {
+                          InventoryService inventoryService,
+                          NotificationService notificationService) {
         this.invoiceRepository = invoiceRepository;
         this.customerRepository = customerRepository;
         this.productRepository = productRepository;
@@ -42,6 +44,7 @@ public class InvoiceService {
         this.orderRepository = orderRepository;
         this.transactionRepository = transactionRepository;
         this.inventoryService = inventoryService;
+        this.notificationService = notificationService;
     }
 
     // ===== Request / response shapes =====
@@ -138,6 +141,11 @@ public class InvoiceService {
         invoice = invoiceRepository.save(invoice);
         invoice.setInvoiceNumber(String.format("INV-%d-%05d", Year.now().getValue(), invoice.getId()));
         invoice = invoiceRepository.save(invoice);
+
+        // NEW: tell the admins. Same transaction as the order, so the notification
+        // exists only if the order was really saved.
+        notificationService.orderPlaced(invoice,
+                wanted.values().stream().mapToInt(Integer::intValue).sum());
 
         return toDto(invoice);
     }
